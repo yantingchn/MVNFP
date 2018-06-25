@@ -1,0 +1,86 @@
+
+Input:	SFCR(service function chaining request, including: PU (position of user), D (demand of user's service), kappa(mobility ratio))
+		G(V, E): Substrate Network
+		C(v), B(v, v'): Capacity of Nodes, Links
+		P: All path from nodes to nodes
+
+#### Define omega ####
+#### Define gamma ####
+
+Algorithm 1: Embedding scheme of service chain
+
+while receiving SFCR do
+	if SFCR is request of service initialization then
+		Initialization(SFCR)
+	else if SFCR is request of service handover then
+		Handover(SFCR)
+	else if SFCR is request of service termination then
+		Release resource of SFCR
+	end if
+end while
+
+
+
+Algorithm 2: Initialization 
+
+Select the first virtual node(closest to user) in SFCR as n_1st;
+Embed n_1st into the substrate node v_0 which is closest to PU; 
+Initialize queue q, enqueue n_1st to q;
+Initialize D as empty set;
+v <- v_0;
+while q is not empty do
+	n = dequeue(q);
+	for virtual link l connected to n do 
+		if n' has not been embedded then
+			n' <- the other endpoint of l;
+			C <- {v' | adjacent substrate nodes of v & v} \ D;
+			calculate omega for all v' in C;
+			embed n' onto the v' with min omega, embed l onto the edge(v, v');
+			enqueue n' to q, mark n' as embedded;
+			if v' not equal to v then
+				D = D U {v'};
+				v <- v';
+			end if
+		end if
+	end for
+end while
+
+
+
+Algorithm 3: Handover
+
+{p_i} <- {all paths that origin from v_0 & path delay < SFCR's requirement};
+Calculate gamma value for all paths in {p_i};
+Sort out {p_i} increasingly according to gamma;
+stop <- false;
+i <- 1;
+
+while (stop = false) & (i < N_max) do
+	Select the first virtual node(closest to user) in SFCR as n_1st;
+	Initialize queue q1, enqueue n_1st into q;
+	success <- true;
+	while q is not empty do
+		n = dequeue(q);
+		if (n not satisfies SFCR's requirement) or (n not allocated on p_i) then
+			choose feasible substrate node v on p_i with min omega;
+			migrate n and its attached link onto p_i with min lamda;
+			if failed migration then 
+				success <- false;
+				break;
+			end if
+		end if
+		mark n as migrated;
+		n' <- the node shares same edge with n and has not been migrated;
+		enqueue n' to q;
+	end while
+	if success then
+		stop <- true;
+	else 
+		i <- i+1;
+	end if
+end
+
+
+
+[Reference]
+[1] Eppstein D. Finding the k shortest paths. SIAM Journal on Computing 1998; 28(2):652–673.

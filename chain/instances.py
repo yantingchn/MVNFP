@@ -1,4 +1,7 @@
-import math
-from collections import defaultdict
+class Instance:
+	def __init__(self, cpu, location):
+		self.cpu = mem
+		self.location = location
+
 
 

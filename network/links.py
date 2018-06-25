@@ -1,15 +1,13 @@
-import math
-
-
 class Links:
-        def __init__(self, ids, dr, delay):
-                    self.ids = ids
-                    self.dr = dr
-                    self.delay = delay
+    def __init__(self, ids, bw, delay):
+        #form [1,2]
+        self.ids = ids 
+        self.bw = bw
+        self.delay = delay
+        self.edges = []
 
-        def weight(self, link):
-                    if self.dr[link] == 0:
-                        return math.inf
-                    elif self.delay[link] == 0:
-                        return 0
-                    return 1 / (self.dr[link] + 1 / self.delay[link])
+    def used_bw(self):
+        return sum(c.flow for c in self.edges)
+
+    def remain_bw(self):
+        return self.bw - sum(c.flow for c in self.chains)
