@@ -1,0 +1,49 @@
+# VNF chain
+
+########################################
+chain 20
+
+# Nodes: id mem
+
+0 0 
+1 10
+2 10
+4 10
+
+# Links: src_id sink_id flow delay_req
+0 1 9
+1 2 8
+2 3 7
+3 4 6
+
+########################################
+chain 10
+
+# Nodes: id mem
+
+0 0 
+1 20
+2 20
+4 20
+
+# Links: src_id sink_id flow delay_req
+0 1 8
+1 2 7
+2 3 6
+3 4 5
+
+########################################
+chain 15
+
+# Nodes: id mem
+
+0 0 
+1 30
+2 30
+4 30
+
+# Links: src_id sink_id flow delay_req
+0 1 2
+1 2 3
+2 3 4
+3 4 5
