@@ -4,7 +4,7 @@ from Chain.instances import Instance
 from random import randint
 
 def generator(chain_id, chain):
-	mobility = random_mobility
+	mobility = random_mobility()
 	instances = Instance(chain['node_ids'], chain['cpu'])
 	edges = Edge(chain['edge_ids'], chain['delay_req'])
 	chain = Chain(chain_id, chain['flow'], mobility, instances, edges)

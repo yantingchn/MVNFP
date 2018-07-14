@@ -8,6 +8,7 @@ chain 20
 0 0 
 1 10
 2 10
+3 10
 4 10
 
 # Links: src_id sink_id flow delay_req
@@ -24,6 +25,7 @@ chain 10
 0 0 
 1 20
 2 20
+3 20
 4 20
 
 # Links: src_id sink_id flow delay_req
@@ -40,6 +42,7 @@ chain 15
 0 0 
 1 30
 2 30
+3 30
 4 30
 
 # Links: src_id sink_id flow delay_req
