@@ -9,6 +9,7 @@ class Chain:
 		self.instances = instances
 		self.edges = edges
 		self.mig_links = {}
+		self.mig_traffic = {}
 		self.mig_span = 0
 		self.HO_timer = 0
 		self.SE_timer = 0
@@ -25,18 +26,25 @@ class Chain:
 	def increase_timer(self):
 		self.HO_timer += 1
 		self.SE_timer += 1
-		if self.mig_span > self.MIG_timer:
+
+	def increase_mig_timer(self):
+		if self.mig_span != 0.0:
 			self.MIG_timer += 1
 
 	def is_mig_end(self):
-		return (self.MIG_timer >= self.mig_span)
+		print( "Mig_t",self.MIG_timer, "mig_s", self.mig_span)
+		return ((self.MIG_timer >= self.mig_span) and self.mig_span != 0)
+
+	def reset_mark(self):
+		self.instances.reset_mark()
+		self.edges.reset_mark()
 
 	def reset_HO_timer(self):
 		self.HO_timer = 0
 	def reset_mig_timer(self):
 		self.MIG_timer = 0
 	def reset_mig_span(self):
-		self.mig_span = 0
+		self.mig_span = 0.0
 
 	def set_node_location(self, id, location):
 		self.instances.set_location(id, location)

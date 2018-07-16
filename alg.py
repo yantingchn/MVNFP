@@ -1,29 +1,7 @@
 from operator import itemgetter, attrgetter
-
-# Algorithm: Initialization 
-
-# Select the first virtual node(closest to user) in SFCR as n_1st;
-# Embed n_1st into the substrate node v_0 which is closest to PU; 
-# Initialize queue q, enqueue n_1st to q;
-# Initialize D as empty set;
-# v <- v_0;
-# while q is not empty do
-# 	n = dequeue(q);
-# 	for virtual link l connected to n do 
-# 		if n' has not been embedded then
-# 			n' <- the other endpoint of l;
-# 			C <- {v' | adjacent substrate nodes of v & v} \ D;
-# 			calculate omega for all v' in C;
-# 			embed n' onto the v' with min omega, embed l onto the edge(v, v');
-# 			enqueue n' to q, mark n' as embedded;
-# 			if v' not equal to v then
-# 				D = D U {v'};
-# 				v <- v';
-# 			end if
-# 		end if
-# 	end for
-# end while
-
+from itertools import islice
+import networkx as nx
+import copy
 
 def SFCR_embedding(g, c):
 
@@ -56,14 +34,14 @@ def SFCR_embedding(g, c):
 				g.nodes[v]["u_c"] += c.instances.cpu[i]
 				c.set_node_location(i, v)
 				c.instances.mark[i] = True
-				c.set_edge_location((j, i), (v, v))
+				c.set_edge_location((j, i), [(v, v)])
 				c.edges.mark[(j, i)] = True
 			else:
 				g.nodes[u]["u_c"] += c.instances.cpu[i]
-				c.set_node_location(i, v)
+				c.set_node_location(i, u)
 				c.instances.mark[i] = True
 				g[u][v]["u_b"] += c.flow_size
-				c.set_edge_location((j, i), (v, u))
+				c.set_edge_location((j, i), [(v, u)])
 				c.edges.mark[(j, i)] = True
 				D.append(v)
 				v = u
@@ -75,52 +53,231 @@ def SFCR_embedding(g, c):
 
 	return embedding_success
 
-# Algorithm: Handover
-
-# {p_i} <- {all paths that origin from v_0 & path delay < SFCR's requirement};
-# Calculate gamma value for all paths in {p_i};
-# Sort out {p_i} increasingly according to gamma;
-# stop <- false;
-# i <- 1;
-
-# while (stop = false) & (i < N_max) do
-# 	Select the first virtual node(closest to user) in SFCR as n_1st;
-# 	Initialize queue q1, enqueue n_1st into q;
-# 	success <- true;
-# 	while q is not empty do
-# 		n = dequeue(q);
-# 		if (n not satisfies SFCR's requirement) or (n not allocated on p_i) then
-# 			choose feasible substrate node v on p_i with min omega;
-# 			migrate n and its attached link onto p_i with min lamda;
-# 			if failed migration then 
-# 				success <- false;
-# 				break;
-# 			end if
-# 		end if
-# 		mark n as migrated;
-# 		n' <- the node shares same edge with n and has not been migrated;
-# 		enqueue n' to q;
-# 	end while
-# 	if success then
-# 		stop <- true;
-# 	else 
-# 		i <- i+1;
-# 	end if
-# end
 
 def SFCR_migration(g, c):
+	migration_success = True
 	
-	return True
+	v = c.get_node_location("0")
+	u = c.get_node_location("1")
+	w = c.get_node_location(c.instances.ids[-1])
+	k = 10
+
+	for a, b in c.get_edge_location(("0", "1")):
+		if a != b:
+			g[a][b]["u_b"] -= c.flow_size
+	c.set_edge_location(("0", "1"), [])
+
+	p = nx.shortest_path(g, source = v, target = u, weight="delay")
+
+	path_delay = 0
+	for i in range(1,len(p)):
+		path_delay += g[p[i-1]][p[i]]["delay"]
+		if (g[p[i-1]][p[i]]["bw"] - g[p[i-1]][p[i]]["u_b"]) < c.flow_size:
+			migration_success = False
+
+	if check_delay(path_delay, c.edges.delay_req[("0", "1")]):
+		migration_success = False
+
+	if migration_success: 
+		new_edge = []
+		for i in range(1,len(p)):
+			g[p[i-1]][p[i]]["u_b"] += c.flow_size
+			new_edge.append((p[i-1],p[i]))
+		c.set_edge_location((u, v), new_edge)
+
+		for i in c.edges.ids:
+			c.edges.mark[i] = True
+		for i in c.instances.ids:
+			c.instances.mark[i] = True
+
+	else: # Migration Part
+		original_path = []
+		for i in c.instances.ids:
+			original_path.append(c.get_node_location(i))
+
+		# Clear original flow
+		for e in c.edges.ids:
+			if e[0] == "0" and e[1] == "1":
+				continue
+			for a, b in c.get_edge_location(e):
+				if a != b:
+					g[a][b]["u_b"] -= c.flow_size
+
+		# Clear original VNF
+		for i in c.instances.ids:
+			if i == "0":
+				continue
+			g.nodes[c.get_node_location(i)]["u_c"] -= c.instances.cpu[i]
+
+		path_set = k_shortest_paths(g, v, w, k, "delay")
+		evaluated_path_set = []
+		for i in range(0, len(path_set)):
+			evaluated_path_set.append([compare_paths(original_path, path_set[i]), path_set[i]])
+
+		evaluated_path_set = sorted(evaluated_path_set,key=lambda l:l[0])
+
+
+		mig_t = []
+		g_c_set = []
+
+		for i in range(0, len(evaluated_path_set)):
+			g_tmp = copy.deepcopy(g)
+			c_tmp = copy.deepcopy(c)
+			if mig_time_for_dif_path(g_tmp, c_tmp, evaluated_path_set[i][1]):
+				mig_t.append(c_tmp.mig_span)
+				g_c_set.append((g_tmp, c_tmp))
+
+		# Check migration success
+		if len(mig_t) != 0: 
+			migration_success = True
+			index = mig_t.index(min(mig_t))
+			g, c = g_c_set[index]
+		# input()
+
+	return migration_success, g, c
 
 
 def embedding_grade(cap, bw, u_c, u_b, k):
 	return u_c/cap + k*u_b/bw
+
+def mig_time_for_dif_path(g, c, p):
+	mig_success = True
+	prev_vnf = "0"
+	for n in c.instances.ids:
+		if n == '0':
+			c.instances.mark[n] = True
+			continue
+		cur_loc = c.get_node_location(n)
+		tmp_path = []
+		tmp_mig_t = []
+		for m in p:
+			tmp_path.append(m)
+
+			# check link feasibility
+			if not check_path_delay(g, tmp_path, c.edges.delay_req[(prev_vnf, n)]):
+				continue
+			if not check_path_resource(g, tmp_path, c.flow_size):
+				continue
+			if not check_node_resource(g, m, c.instances.cpu[n]):
+				continue
+
+			allocate_flow(g, tmp_path, c.flow_size)
+			allocate_vnf(g, m, c.instances.cpu[n])
+			m_t, mig_f, s_p = mig_time(g, cur_loc, m, c.instances.cpu[n]) # TODO Check Mig feasibility by m_t
+
+			release_flow(g, tmp_path, c.flow_size)
+			release_vnf(g, m, c.instances.cpu[n])
+
+			if m_t > c.mobility[0]:
+				continue
+
+			tmp_mig_t.append((m_t, mig_f, s_p, tmp_path.copy())) # 0 mig_time, 1 mig_flow, 2 sp_mig_path, 3 new edge loc
+
+		if len(tmp_mig_t) == 0:
+			mig_success = False
+			break
+		else:
+			tmp_mig_t = sorted(tmp_mig_t)
+			m_t, mig_f, s_p, c_p = tmp_mig_t[0]
+
+			allocate_flow(g, c_p, c.flow_size)
+			c.set_edge_location((prev_vnf, n), path_to_edges(c_p))
+			c.edges.mark[(prev_vnf, n)] = True
+			allocate_vnf(g, c_p[-1], c.instances.cpu[n])
+			c.set_node_location(n, c_p[-1])
+			c.instances.mark[n] = True
+
+			if c.mig_span < round(m_t):
+				c.mig_span = round(m_t) 
+
+			allocate_flow(g, s_p, mig_f) # allocate mig traffic
+			c.mig_links[n] = path_to_edges(s_p)
+			c.mig_traffic[n] = mig_f
+
+
+		prev_vnf = n
+
+	return mig_success
+
+
+
+# Define mig bw = 1/2 of residual bw
+def mig_time(g, n, m, vnf_size):
+	if n == m:
+		mig_t = 0.0
+		flow_size = 0.0
+		sp = [n]
+	else:
+		sp = nx.shortest_path(g, source = n, target = m)
+		edge_u = []
+		for i in range(1, len(sp)):
+			edge_u.append(g[sp[i-1]][sp[i]]["bw"] - g[sp[i-1]][sp[i]]["u_b"])
+
+		flow_size = max(edge_u)/2.0
+		if flow_size == 0:
+			mig_t = float("Inf")
+		else:
+			mig_t = vnf_size/flow_size
+
+	return mig_t, flow_size, sp
+
+def path_to_edges(p):
+	edges = []
+	if len(p) == 1:
+		edges.append((p[0], p[0]))
+	else:
+		for i in range(1, len(p)):
+			edges.append((p[i-1], p[i]))
+
+	return edges
+
+def check_path_delay(g, p, delay_req):
+	d = 0
+	if len(p) != 0:
+		for i in range(1, len(p)):
+			d += g[p[i-1]][p[i]]["delay"]
+
+	return (d < delay_req)
+def check_path_resource(g, p, f):
+	suf = True
+	if len(p) != 0:
+		for i in range(1, len(p)):
+			if (g[p[i-1]][p[i]]["bw"] - g[p[i-1]][p[i]]["u_b"]) < f:
+				suf = False
+				break
+	return suf
+
+def check_node_resource(g, n, vnf_size):
+	return (g.nodes[n]["cpu"] - g.nodes[n]["u_c"]) >= vnf_size
+
+def allocate_flow(g, p, f):
+	if len(p) != 0:
+		for i in range(1, len(p)):
+			g[p[i-1]][p[i]]["u_b"] += f
+
+def allocate_vnf(g, m, vnf_size):
+	g.nodes[m]["u_c"] += vnf_size
+
+def release_flow(g, p, f):
+	if len(p) != 0:
+		for i in range(1, len(p)):
+			g[p[i-1]][p[i]]["u_b"] -= f
+
+def release_vnf(g, m, vnf_size):
+	g.nodes[m]["u_c"] -= vnf_size
+
+def compare_paths(p1, p2):
+	return float(len(list( set(p1) | set(p2) ))) / float((len(p1) + len(p2)))
+
+def k_shortest_paths(g, source, target, k, weight=None):
+    return list(islice(nx.shortest_simple_paths(g, source, target, weight=weight), k))
 
 def check_delay(delay, link_delay_req):
     feasible = True
     if delay > link_delay_req:
     	feasible = False
     return feasible
+
 
 def release_resource(g, c):
 	for i in c.instances.ids:
@@ -129,14 +286,20 @@ def release_resource(g, c):
 			c.instances.mark[i] = False
 	for i in c.edges.ids:
 		if c.edges.mark[i]:
-			a,b = c.get_edge_location(i)
-			if a != b:
-				g[a][b]["u_b"] -= c.flow_size
+			for a, b in c.get_edge_location(i):
+				if a != b:
+					g[a][b]["u_b"] -= c.flow_size
 			c.edges.mark[i] = False
 
 def release_mig_resource(g, c):
-	for i in c.mig_links:
-		g[i[0]][i[1]]["u_b"] -= c.mig_links[i]
+	for key, value in c.mig_links.items():
+		if value[0][0] == value[0][1]:
+			continue
+		g[value[0][0]][value[0][1]]["u_b"] -= c.mig_traffic[key]
 
+	c.mig_links = {}
+	c.mig_traffic = {}
+
+# Jin Y. Yen, “Finding the K Shortest Loopless Paths in a Network”, Management Science, Vol. 17, No. 11, Theory Series (Jul., 1971), pp. 712-716.
 
 

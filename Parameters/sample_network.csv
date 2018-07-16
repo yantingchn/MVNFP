@@ -1,17 +1,14 @@
 # substrate network: 
 # only use spaces as delimiter (no tabs)
 # Nodes: id cpu
-0 100
-1 100
-2 100
-3 100
-4 100
-5 100
+0 1000
+1 1000
+2 1000
+3 1000
 
 # Links: src_id sink_id bw delay
 0 1 100 1
-1 2 100 1
+1 2 100 3
 2 3 100 1
-3 0 100 1
-4 3 100 1
-5 3 100 1
+3 0 100 3
+

@@ -14,7 +14,9 @@ def generator(chain_id, chain):
 
 
 def random_mobility():
-	user_residence_time = float(randint(1,5)*10)
-	service_living_time = float(randint(1,5)*10)
+	# user_residence_time = float(randint(1,5)*10)
+	# service_living_time = float(randint(1,5)*30)
+	user_residence_time = 21.0
+	service_living_time = 40.0
 
 	return user_residence_time, service_living_time

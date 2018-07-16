@@ -12,3 +12,7 @@ class Edge:
 
 	def get_location(self, id):
 		return self.location[id]
+
+	def reset_mark(self):
+		for i in self.ids:
+			self.mark[i] = False
