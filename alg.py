@@ -1,6 +1,7 @@
 from operator import itemgetter, attrgetter
 from itertools import islice
 import networkx as nx
+from math import ceil
 import copy
 
 def SFCR_embedding(g, c):
@@ -28,7 +29,17 @@ def SFCR_embedding(g, c):
 				break
 			
 			grade = sorted(grade, key=itemgetter(1))
+			tmp_node = []
+			tmp_node.append(grade[0][0])
+			for index in range(1,len(grade)):
+				if grade[index][1] == grade[0][1]:
+					tmp_node.append(grade[index][0])
+			
 			u = grade[0][0]
+			if v in tmp_node:
+				u = v
+			
+			print("chain",c.chain_id, "instance", i, "grade", grade)
 
 			if u == v:
 				g.nodes[v]["u_c"] += c.instances.cpu[i]
@@ -55,84 +66,90 @@ def SFCR_embedding(g, c):
 
 
 def SFCR_migration(g, c):
-	migration_success = True
+	migration_success = False
 	
 	v = c.get_node_location("0")
 	u = c.get_node_location("1")
 	w = c.get_node_location(c.instances.ids[-1])
 	k = 10
 
-	for a, b in c.get_edge_location(("0", "1")):
-		if a != b:
-			g[a][b]["u_b"] -= c.flow_size
-	c.set_edge_location(("0", "1"), [])
+	# for a, b in c.get_edge_location(("0", "1")):
+	# 	if a != b:
+	# 		g[a][b]["u_b"] -= c.flow_size
+	# c.set_edge_location(("0", "1"), [])
 
-	p = nx.shortest_path(g, source = v, target = u, weight="delay")
+	# p = nx.shortest_path(g, source = v, target = u, weight="delay")
 
-	path_delay = 0
-	for i in range(1,len(p)):
-		path_delay += g[p[i-1]][p[i]]["delay"]
-		if (g[p[i-1]][p[i]]["bw"] - g[p[i-1]][p[i]]["u_b"]) < c.flow_size:
-			migration_success = False
+	# path_delay = 0
+	# for i in range(1,len(p)):
+	# 	path_delay += g[p[i-1]][p[i]]["delay"]
+	# 	if (g[p[i-1]][p[i]]["bw"] - g[p[i-1]][p[i]]["u_b"]) < c.flow_size:
+	# 		migration_success = False
 
-	if check_delay(path_delay, c.edges.delay_req[("0", "1")]):
-		migration_success = False
+	# if check_delay(path_delay, c.edges.delay_req[("0", "1")]):
+	# 	migration_success = False
 
-	if migration_success: 
-		new_edge = []
-		for i in range(1,len(p)):
-			g[p[i-1]][p[i]]["u_b"] += c.flow_size
-			new_edge.append((p[i-1],p[i]))
-		c.set_edge_location((u, v), new_edge)
+	# if migration_success: 
+	# 	new_edge = []
+	# 	for i in range(1,len(p)):
+	# 		g[p[i-1]][p[i]]["u_b"] += c.flow_size
+	# 		new_edge.append((p[i-1],p[i]))
+	# 	c.set_edge_location((u, v), new_edge)
 
-		for i in c.edges.ids:
-			c.edges.mark[i] = True
-		for i in c.instances.ids:
-			c.instances.mark[i] = True
+	# 	for i in c.edges.ids:
+	# 		c.edges.mark[i] = True
+	# 	for i in c.instances.ids:
+	# 		c.instances.mark[i] = True
 
-	else: # Migration Part
-		original_path = []
-		for i in c.instances.ids:
-			original_path.append(c.get_node_location(i))
+	# else: # Migration Part
+	original_path = []
+	for i in c.instances.ids:
+		original_path.append(c.get_node_location(i))
 
-		# Clear original flow
-		for e in c.edges.ids:
-			if e[0] == "0" and e[1] == "1":
-				continue
-			for a, b in c.get_edge_location(e):
-				if a != b:
-					g[a][b]["u_b"] -= c.flow_size
+	# Clear original flow
+	for e in c.edges.ids:
+		# if e[0] == "0" and e[1] == "1":
+		# 	continue
+		for a, b in c.get_edge_location(e):
+			if a != b:
+				g[a][b]["u_b"] -= c.flow_size
 
-		# Clear original VNF
-		for i in c.instances.ids:
-			if i == "0":
-				continue
-			g.nodes[c.get_node_location(i)]["u_c"] -= c.instances.cpu[i]
+	# Clear original VNF
+	for i in c.instances.ids:
+		if i == "0":
+			continue
+		g.nodes[c.get_node_location(i)]["u_c"] -= c.instances.cpu[i]
 
-		path_set = k_shortest_paths(g, v, w, k, "delay")
-		evaluated_path_set = []
-		for i in range(0, len(path_set)):
-			evaluated_path_set.append([compare_paths(original_path, path_set[i]), path_set[i]])
-
-		evaluated_path_set = sorted(evaluated_path_set,key=lambda l:l[0])
+	print("After clear flow ---------------")
+	print(g.nodes(data=True))
+	print(g.edges(data=True))
 
 
-		mig_t = []
-		g_c_set = []
 
-		for i in range(0, len(evaluated_path_set)):
-			g_tmp = copy.deepcopy(g)
-			c_tmp = copy.deepcopy(c)
-			if mig_time_for_dif_path(g_tmp, c_tmp, evaluated_path_set[i][1]):
-				mig_t.append(c_tmp.mig_span)
-				g_c_set.append((g_tmp, c_tmp))
+	path_set = k_shortest_paths(g, v, w, k, "delay")
+	evaluated_path_set = []
+	for i in range(0, len(path_set)):
+		evaluated_path_set.append([compare_paths(original_path, path_set[i]), path_set[i]])
 
-		# Check migration success
-		if len(mig_t) != 0: 
-			migration_success = True
-			index = mig_t.index(min(mig_t))
-			g, c = g_c_set[index]
-		# input()
+	evaluated_path_set = sorted(evaluated_path_set,key=lambda l:l[0])
+
+
+	mig_t = []
+	g_c_set = []
+
+	for i in range(0, len(evaluated_path_set)):
+		g_tmp = copy.deepcopy(g)
+		c_tmp = copy.deepcopy(c)
+		if mig_time_for_dif_path(g_tmp, c_tmp, evaluated_path_set[i][1]):
+			mig_t.append(c_tmp.mig_span)
+			g_c_set.append((g_tmp, c_tmp))
+
+	# Check migration success
+	if len(mig_t) != 0: 
+		migration_success = True
+		index = mig_t.index(min(mig_t))
+		g, c = g_c_set[index]
+	# input()
 
 	return migration_success, g, c
 
@@ -161,17 +178,19 @@ def mig_time_for_dif_path(g, c, p):
 			if not check_node_resource(g, m, c.instances.cpu[n]):
 				continue
 
+			print("1")
 			allocate_flow(g, tmp_path, c.flow_size)
 			allocate_vnf(g, m, c.instances.cpu[n])
-			m_t, mig_f, s_p = mig_time(g, cur_loc, m, c.instances.cpu[n]) # TODO Check Mig feasibility by m_t
+			m_t, mig_f, s_p = mig_time(g, cur_loc, m, c.instances.cpu[n])
 
 			release_flow(g, tmp_path, c.flow_size)
 			release_vnf(g, m, c.instances.cpu[n])
 
 			if m_t > c.mobility[0]:
+				print("m_t > T_r", m_t)
 				continue
 
-			tmp_mig_t.append((m_t, mig_f, s_p, tmp_path.copy())) # 0 mig_time, 1 mig_flow, 2 sp_mig_path, 3 new edge loc
+			tmp_mig_t.append((m_t, mig_f, s_p, copy.deepcopy(tmp_path))) # 0 mig_time, 1 mig_flow, 2 sp_mig_path, 3 new edge loc
 
 		if len(tmp_mig_t) == 0:
 			mig_success = False
@@ -180,6 +199,10 @@ def mig_time_for_dif_path(g, c, p):
 			tmp_mig_t = sorted(tmp_mig_t)
 			m_t, mig_f, s_p, c_p = tmp_mig_t[0]
 
+			print("n","m_t","mig_f","s_p", "c_p (", n, ")", tmp_mig_t[0])
+			print("2")
+			print(g.nodes(data=True))
+			print(g.edges(data=True))
 			allocate_flow(g, c_p, c.flow_size)
 			c.set_edge_location((prev_vnf, n), path_to_edges(c_p))
 			c.edges.mark[(prev_vnf, n)] = True
@@ -187,9 +210,12 @@ def mig_time_for_dif_path(g, c, p):
 			c.set_node_location(n, c_p[-1])
 			c.instances.mark[n] = True
 
-			if c.mig_span < round(m_t):
-				c.mig_span = round(m_t) 
+			if c.mig_span < ceil(m_t):
+				c.mig_span = ceil(m_t) 
 
+			print("3")
+			print(g.nodes(data=True))
+			print(g.edges(data=True))
 			allocate_flow(g, s_p, mig_f) # allocate mig traffic
 			c.mig_links[n] = path_to_edges(s_p)
 			c.mig_traffic[n] = mig_f
@@ -203,6 +229,9 @@ def mig_time_for_dif_path(g, c, p):
 
 # Define mig bw = 1/2 of residual bw
 def mig_time(g, n, m, vnf_size):
+	sp = []
+	mig_t = 0.0
+	flow_size = 0.0
 	if n == m:
 		mig_t = 0.0
 		flow_size = 0.0
@@ -213,7 +242,7 @@ def mig_time(g, n, m, vnf_size):
 		for i in range(1, len(sp)):
 			edge_u.append(g[sp[i-1]][sp[i]]["bw"] - g[sp[i-1]][sp[i]]["u_b"])
 
-		flow_size = max(edge_u)/2.0
+		flow_size = min(edge_u)/2.0
 		if flow_size == 0:
 			mig_t = float("Inf")
 		else:
@@ -233,14 +262,14 @@ def path_to_edges(p):
 
 def check_path_delay(g, p, delay_req):
 	d = 0
-	if len(p) != 0:
+	if len(p) > 1:
 		for i in range(1, len(p)):
 			d += g[p[i-1]][p[i]]["delay"]
 
 	return (d < delay_req)
 def check_path_resource(g, p, f):
 	suf = True
-	if len(p) != 0:
+	if len(p) > 1:
 		for i in range(1, len(p)):
 			if (g[p[i-1]][p[i]]["bw"] - g[p[i-1]][p[i]]["u_b"]) < f:
 				suf = False
@@ -251,17 +280,26 @@ def check_node_resource(g, n, vnf_size):
 	return (g.nodes[n]["cpu"] - g.nodes[n]["u_c"]) >= vnf_size
 
 def allocate_flow(g, p, f):
-	if len(p) != 0:
+	if len(p) > 1:
 		for i in range(1, len(p)):
+			if g[p[i-1]][p[i]]["u_b"] < 0:
+				print(g[p[i-1]][p[i]]["u_b"])
+				print(p)
+				input()
 			g[p[i-1]][p[i]]["u_b"] += f
 
 def allocate_vnf(g, m, vnf_size):
+	if g.nodes[m]["u_c"] < 0:
+		input()
 	g.nodes[m]["u_c"] += vnf_size
 
 def release_flow(g, p, f):
-	if len(p) != 0:
+	if len(p) > 1:
 		for i in range(1, len(p)):
 			g[p[i-1]][p[i]]["u_b"] -= f
+			if g[p[i-1]][p[i]]["u_b"] < 0:
+				print(p[i-1], p[i])
+				input()
 
 def release_vnf(g, m, vnf_size):
 	g.nodes[m]["u_c"] -= vnf_size
@@ -292,10 +330,12 @@ def release_resource(g, c):
 			c.edges.mark[i] = False
 
 def release_mig_resource(g, c):
-	for key, value in c.mig_links.items():
-		if value[0][0] == value[0][1]:
-			continue
-		g[value[0][0]][value[0][1]]["u_b"] -= c.mig_traffic[key]
+	print("release mig traffic")
+	for key in c.mig_links:
+		for a,b in c.mig_links[key]:
+			if a == b:
+				continue
+			g[a][b]["u_b"] -= c.mig_traffic[key]
 
 	c.mig_links = {}
 	c.mig_traffic = {}

@@ -12,6 +12,7 @@ def random_move(g, c):
 	next_pos = choice(list(g[cur_pos].keys()))
 	c.set_node_location("0", next_pos)
 	c.instances.mark["0"] = True
+	print("chain_id", c.chain_id, "move",cur_pos, "to", next_pos)
 	
 
 

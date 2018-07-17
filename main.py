@@ -22,14 +22,18 @@ for i in links.ids:
 	g.add_edge(i[0], i[1], bw = links.bw[i], delay = links.delay[i], u_b = 0.0)
 
 nx.draw(g, with_labels=True, font_weight='bold')
-plt.plot()
-# simulation setting
-user_arrival_rate = 10.0
-simulation_time = 700
+plt.draw()
+
+
+# Initial Var
 cur_time = 0
 chain_id = 0
 n_t = 0
 c = None
+
+# simulation setting
+user_arrival_rate = 1.0
+simulation_time = 1000
 
 
 Mig_SFCR = []
@@ -51,13 +55,14 @@ while cur_time < simulation_time:
 		c.instances.mark[str(0)] = True
 		chain_id += 1	
 		
-		print("SFCR init -> Current Time:", cur_time, "; Chain Id:", chain_id, "; UE Position:", c.get_node_location("0"))
+		print("---------------------------------------------------------------")
+		print("SFCR init -> Current Time:", cur_time, "; Chain Id:", chain_id-1, "; UE Position:", c.get_node_location("0"))
 		print("Embed SFCR",len(Embedded_SFCR))
 		print("Fail_SFCR", len(Fail_SFCR))
 		print("Mig_SFCR", len(Mig_SFCR))
 		print("Finish_SFCR", len(Finish_SFCR))
-		print(g.nodes(data=True))
-		print(g.edges(data=True))
+		print("Nodes->",g.nodes(data=True))
+		print("Edges->", g.edges(data=True))
 
 	# Embedding
 	if c is not None:
@@ -66,8 +71,11 @@ while cur_time < simulation_time:
 		else:
 			Fail_SFCR.append(c)
 			T_down_2 += c.mobility[1]
-
+		print("After embed")
+		print("Nodes->",g.nodes(data=True))
+		print("Edges->", g.edges(data=True))
 		c = None
+
 
 	remove_list_of_embed = []
 	Mig_SFCR_tmp = []
@@ -91,10 +99,14 @@ while cur_time < simulation_time:
 					remove_list_of_embed.append(s)
 					Mig_SFCR_tmp.append(Embedded_SFCR[s])
 				T_mig += Embedded_SFCR[s].mig_span
+				print("Nodes->",g.nodes(data=True))
+				print("Edges->", g.edges(data=True))
 			else:
 				remove_list_of_embed.append(s)
 				Fail_SFCR.append(Embedded_SFCR[s])
 				T_down += Embedded_SFCR[s].mobility[1] - Embedded_SFCR[s].SE_timer
+				print("Nodes->",g.nodes(data=True))
+				print("Edges->", g.edges(data=True))
 
 	remove_list_of_mig = []
 	Embedded_SFCR_tmp = []
@@ -138,6 +150,6 @@ print("Finish_SFCR", len(Finish_SFCR))
 print("T_mig", T_mig)
 print("T_down", T_down)
 print("T_down_2", T_down_2)
-print(g.nodes(data=True))
-print(g.edges(data=True))
-
+print("Nodes->", g.nodes(data=True))
+print("Edges->", g.edges(data=True))
+print("AC Rate:", (len(Embedded_SFCR)+len(Finish_SFCR))/(len(Fail_SFCR)+len(Embedded_SFCR)+len(Finish_SFCR)))

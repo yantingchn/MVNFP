@@ -32,7 +32,6 @@ class Chain:
 			self.MIG_timer += 1
 
 	def is_mig_end(self):
-		print( "Mig_t",self.MIG_timer, "mig_s", self.mig_span)
 		return ((self.MIG_timer >= self.mig_span) and self.mig_span != 0)
 
 	def reset_mark(self):
